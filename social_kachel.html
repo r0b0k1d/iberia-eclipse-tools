@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iberia Eclipse — Social Kachel Generator</title>
+<style>
+  :root { --ui-bg:#0d0d0f; --ui-surface:#18181c; --ui-border:#2a2a30; --ui-accent:#e8a832; --ui-text:#e8e6e0; --ui-muted:#888; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--ui-bg); color:var(--ui-text); font-family:'DM Mono',monospace; display:flex; height:100vh; overflow:hidden; }
+  #panel { width:300px; min-width:300px; background:var(--ui-surface); border-right:1px solid var(--ui-border); display:flex; flex-direction:column; overflow-y:auto; }
+  #panel::-webkit-scrollbar { width:4px; }
+  #panel::-webkit-scrollbar-thumb { background:var(--ui-border); border-radius:2px; }
+  .panel-header { padding:20px 18px 14px; border-bottom:1px solid var(--ui-border); font-size:10px; letter-spacing:0.15em; text-transform:uppercase; color:var(--ui-accent); }
+  .section { padding:14px 18px; border-bottom:1px solid var(--ui-border); }
+  .section-label { font-size:9px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ui-muted); margin-bottom:10px; }
+  .hint { font-size:9px; color:var(--ui-muted); letter-spacing:0.06em; margin-top:8px; }
+  #upload-label { display:block; border:1px dashed var(--ui-border); border-radius:4px; padding:14px; text-align:center; font-size:11px; color:var(--ui-muted); cursor:pointer; transition:border-color 0.2s,color 0.2s; user-select:none; }
+  #upload-label:hover { border-color:var(--ui-accent); color:var(--ui-text); }
+  #upload-label.has-image { border-color:#3a3a40; color:var(--ui-accent); }
+  #upload-label.drag-over { border-color:var(--ui-accent); color:var(--ui-text); background:#1e1a10; }
+  #bg-input { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+  .overlay-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+  .overlay-btn { background:var(--ui-bg); border:1px solid var(--ui-border); border-radius:3px; padding:8px 6px; font-family:'DM Mono',monospace; font-size:9px; letter-spacing:0.08em; color:var(--ui-muted); cursor:pointer; text-align:center; transition:all 0.15s; line-height:1.6; }
+  .overlay-btn:hover { border-color:var(--ui-accent); color:var(--ui-text); }
+  .overlay-btn.active { border-color:var(--ui-accent); color:var(--ui-accent); background:#1e1a10; }
+  .overlay-btn .swatch { display:block; height:18px; border-radius:2px; margin-bottom:5px; }
+  .slider-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .slider-row label { font-size:9px; color:var(--ui-muted); letter-spacing:0.08em; width:80px; flex-shrink:0; text-transform:uppercase; }
+  .slider-row input[type=range] { flex:1; -webkit-appearance:none; height:2px; background:var(--ui-border); border-radius:1px; outline:none; }
+  .slider-row input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:10px; height:10px; border-radius:50%; background:var(--ui-accent); cursor:pointer; }
+  .slider-row .val { font-size:9px; color:var(--ui-muted); width:24px; text-align:right; }
+  .toggle-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .toggle-row > span { font-size:9px; color:var(--ui-muted); letter-spacing:0.08em; text-transform:uppercase; }
+  .toggle { position:relative; width:30px; height:16px; cursor:pointer; display:inline-block; flex-shrink:0; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle-track { position:absolute; inset:0; background:var(--ui-border); border-radius:8px; transition:background 0.2s; }
+  .toggle input:checked + .toggle-track { background:var(--ui-accent); }
+  .toggle-thumb { position:absolute; top:2px; left:2px; width:12px; height:12px; background:#fff; border-radius:50%; transition:transform 0.2s; pointer-events:none; }
+  .toggle input:checked ~ .toggle-thumb { transform:translateX(14px); }
+  .size-presets { display:flex; gap:6px; }
+  .size-btn { flex:1; background:var(--ui-bg); border:1px solid var(--ui-border); border-radius:3px; padding:6px 4px; font-family:'DM Mono',monospace; font-size:9px; letter-spacing:0.08em; color:var(--ui-muted); cursor:pointer; text-align:center; text-transform:uppercase; transition:all 0.15s; }
+  .size-btn:hover { border-color:var(--ui-accent); color:var(--ui-text); }
+  .size-btn.active { border-color:var(--ui-accent); color:var(--ui-accent); background:#1e1a10; }
+  .pos-btns { display:flex; gap:6px; }
+  .pos-btn { background:var(--ui-bg); border:1px solid var(--ui-border); border-radius:3px; padding:5px 10px; font-family:'DM Mono',monospace; font-size:9px; color:var(--ui-muted); cursor:pointer; transition:all 0.15s; text-transform:uppercase; letter-spacing:0.08em; }
+  .pos-btn:hover { border-color:var(--ui-accent); color:var(--ui-text); }
+  .pos-btn.active { border-color:var(--ui-accent); color:var(--ui-accent); background:#1e1a10; }
+  #export-btn { margin:16px 18px; background:var(--ui-accent); color:#0d0d0f; border:none; border-radius:3px; padding:11px 0; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.15em; text-transform:uppercase; cursor:pointer; width:calc(100% - 36px); font-weight:700; transition:opacity 0.15s; }
+  #export-btn:hover { opacity:0.85; }
+  #export-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  #canvas-area { flex:1; display:flex; align-items:center; justify-content:center; background:#0a0a0c; overflow:auto; padding:40px; }
+  #card-wrapper { position:relative; transform-origin:top center; flex-shrink:0; }
+  #card { width:1080px; height:1350px; position:relative; overflow:hidden; isolation:isolate; background:#111; }
+  #card > img:not(#logo-img) { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  #layer-gradient { position:absolute; inset:0; z-index:4; pointer-events:none; mix-blend-mode:multiply; }
+  #layer-headline { position:absolute; left:0; right:0; z-index:5; padding:0 72px; display:none; top:50%; transform:translateY(-50%); }
+  #headline-content { outline:none; font-family:'Montserrat',sans-serif; font-weight:100; font-size:47px; line-height:63px; color:#fff; word-break:break-word; caret-color:rgba(255,255,255,0.8); text-transform:uppercase; letter-spacing:0.16em; }
+  #headline-content b { font-weight:600; }
+  #layer-text { position:absolute; left:0; right:0; z-index:5; padding:0 72px; bottom:5%; }
+  #text-content { outline:none; font-family:'Montserrat',sans-serif; font-weight:100; font-size:47px; line-height:63px; color:#fff; word-break:break-word; caret-color:rgba(255,255,255,0.8); text-transform:uppercase; letter-spacing:0.16em; }
+  #text-content b { font-weight:600; }
+  #layer-logo { position:absolute; z-index:6; pointer-events:none; left:0; right:0; width:100%; display:flex; justify-content:center; align-items:flex-start; overflow:visible; }
+  #logo-img { width:320px; height:auto; display:block; flex-shrink:0; }
+  #layer-arrows { position:absolute; right:64px; z-index:7; pointer-events:none; display:none; font-family:'Montserrat',sans-serif; font-weight:900; font-size:42px; color:#fff; letter-spacing:0.16em; line-height:1; top:52px; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Montserrat:wght@100;600;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+<aside id="panel">
+  <div class="panel-header">☀ Iberia Eclipse — Card Editor</div>
+
+  <div class="section">
+    <div class="section-label">Background Image</div>
+    <label id="upload-label">
+      <input type="file" id="bg-input" accept="image/*">
+      <span id="bg-label">Click to upload</span>
+    </label>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Color Overlay</div>
+    <div class="overlay-grid">
+      <button class="overlay-btn active" data-src="images/01_color-overlay.webp" data-blend="hard-light" data-opacity="1">
+        <span class="swatch" style="background:linear-gradient(to bottom,#7da8aa,#b89a8a)"></span>Day
+      </button>
+      <button class="overlay-btn" data-src="images/02_color-overlay.webp" data-blend="hard-light" data-opacity="0.5">
+        <span class="swatch" style="background:linear-gradient(to bottom,#c4a882,#e8c090)"></span>Dusk
+      </button>
+      <button class="overlay-btn" data-src="images/03_color-overlay.webp" data-blend="hard-light" data-opacity="1">
+        <span class="swatch" style="background:linear-gradient(to bottom,#2a3a5a,#3a6a8a)"></span>Dawn
+      </button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="toggle-row">
+      <span>Gradient</span>
+      <label class="toggle"><input type="checkbox" id="tog-gradient" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </div>
+    <div class="slider-row">
+      <label>Start Y</label>
+      <input type="range" id="sld-grad-start" min="0" max="80" value="20">
+      <span class="val" id="val-grad-start">20</span>
+    </div>
+    <div class="slider-row">
+      <label>Strength</label>
+      <input type="range" id="sld-grad-strength" min="0" max="100" value="85">
+      <span class="val" id="val-grad-strength">85</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="toggle-row">
+      <span>Headline</span>
+      <label class="toggle"><input type="checkbox" id="tog-headline"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </div>
+    <div id="headline-controls" style="display:none">
+      <div class="slider-row">
+        <label>Position Y</label>
+        <input type="range" id="sld-headline-y" min="5" max="95" value="50">
+        <span class="val" id="val-headline-y">50</span>
+      </div>
+      <div class="section-label" style="margin-top:8px">Size</div>
+      <div class="size-presets">
+        <button class="size-btn hl-size" data-px="33" data-lh="48">S</button>
+        <button class="size-btn hl-size active" data-px="47" data-lh="63">M</button>
+        <button class="size-btn hl-size" data-px="60" data-lh="68">L</button>
+      </div>
+      <div class="hint">CMD+B for bold</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Body Text</div>
+    <div class="slider-row">
+      <label>Position Y</label>
+      <input type="range" id="sld-text-y" min="5" max="95" value="5">
+      <span class="val" id="val-text-y">65</span>
+    </div>
+    <div class="section-label" style="margin-top:8px">Size</div>
+    <div class="size-presets">
+      <button class="size-btn body-size" data-px="33" data-lh="48">S</button>
+      <button class="size-btn body-size active" data-px="47" data-lh="63">M</button>
+      <button class="size-btn body-size" data-px="60" data-lh="68">L</button>
+    </div>
+    <div class="hint">CMD+B for bold</div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Logo</div>
+    <div class="toggle-row">
+      <span>Show</span>
+      <label class="toggle"><input type="checkbox" id="tog-logo" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </div>
+    <div class="toggle-row">
+      <span>Position</span>
+      <div class="pos-btns">
+        <button class="pos-btn active" id="logo-top">Top</button>
+        <button class="pos-btn" id="logo-bottom">Bottom</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="toggle-row">
+      <span>Navigation Arrows</span>
+      <label class="toggle"><input type="checkbox" id="tog-arrows"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </div>
+    <div class="toggle-row">
+      <span>Position</span>
+      <div class="pos-btns">
+        <button class="pos-btn active" id="arrows-top">Top</button>
+        <button class="pos-btn" id="arrows-bottom">Bottom</button>
+      </div>
+    </div>
+  </div>
+
+  <button id="export-btn">&#8595; Export PNG</button>
+</aside>
+
+<main id="canvas-area">
+  <div id="card-wrapper">
+    <div id="card">
+      <img id="layer-bg"      style="z-index:1; mix-blend-mode:normal; display:none;" src="" alt="" />
+      <img id="layer-overlay" style="z-index:2; mix-blend-mode:hard-light; opacity:1;" src="images/01_color-overlay.webp" alt="" />
+      <img id="layer-grain"   style="z-index:3; mix-blend-mode:luminosity; opacity:0.25;" src="images/grain_luminosity25.webp" alt="" />
+      <div id="layer-gradient"></div>
+      <div id="layer-headline">
+        <div id="headline-content" contenteditable="true" spellcheck="false">Awesome headline</div>
+      </div>
+      <div id="layer-text">
+        <div id="text-content" contenteditable="true" spellcheck="false">get ready for one of nature's greatest spectacles!</div>
+      </div>
+      <div id="layer-logo">
+        <img id="logo-img" src="images/ie_logo.webp" alt="IE Logo" />
+      </div>
+      <div id="layer-arrows">&gt;&gt;&gt;&gt;</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const CARD_W = 1080, CARD_H = 1350;
+const wrapper = document.getElementById('card-wrapper');
+const card = document.getElementById('card');
+
+// Preload static assets as base64 to avoid tainted canvas on export
+function toBase64(src, callback) {
+  var xhr = new XMLHttpRequest();
+  xhr.onload = function() {
+    var reader = new FileReader();
+    reader.onloadend = function() { callback(reader.result); };
+    reader.readAsDataURL(xhr.response);
+  };
+  xhr.onerror = function() { callback(null); };
+  xhr.open('GET', src);
+  xhr.responseType = 'blob';
+  xhr.send();
+}
+
+var staticAssets = [
+  'images/01_color-overlay.webp',
+  'images/02_color-overlay.webp',
+  'images/03_color-overlay.webp',
+  'images/grain_luminosity25.webp',
+  'images/ie_logo.webp'
+];
+
+staticAssets.forEach(function(src) {
+  toBase64(src, function(b64) {
+    if (!b64) return;
+    document.querySelectorAll('img[src="' + src + '"]').forEach(function(img) {
+      img.src = b64;
+    });
+    document.querySelectorAll('[data-src="' + src + '"]').forEach(function(btn) {
+      btn.dataset.b64 = b64;
+    });
+  });
+});
+
+function scaleCard() {
+  const area = document.getElementById('canvas-area');
+  const scale = Math.min((area.clientWidth - 80) / CARD_W, (area.clientHeight - 80) / CARD_H);
+  wrapper.style.transform = 'scale(' + scale + ')';
+  wrapper.style.marginBottom = '-' + (CARD_H * (1 - scale)) + 'px';
+}
+scaleCard();
+window.addEventListener('resize', scaleCard);
+
+function loadImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  var imgBg = document.getElementById('layer-bg');
+  var bgLabel = document.getElementById('bg-label');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    imgBg.src = e.target.result;
+    imgBg.style.display = 'block';
+    bgLabel.textContent = '✓ ' + file.name;
+    document.getElementById('upload-label').classList.add('has-image');
+  };
+  reader.readAsDataURL(file);
+}
+
+document.getElementById('bg-input').addEventListener('change', function() {
+  loadImageFile(this.files[0]);
+});
+
+var uploadLabel = document.getElementById('upload-label');
+uploadLabel.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  uploadLabel.classList.add('drag-over');
+});
+uploadLabel.addEventListener('dragleave', function() {
+  uploadLabel.classList.remove('drag-over');
+});
+uploadLabel.addEventListener('drop', function(e) {
+  e.preventDefault();
+  uploadLabel.classList.remove('drag-over');
+  loadImageFile(e.dataTransfer.files[0]);
+});
+
+document.querySelectorAll('.overlay-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.overlay-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var overlay = document.getElementById('layer-overlay');
+    overlay.src = btn.dataset.b64 || btn.dataset.src;
+    overlay.style.mixBlendMode = btn.dataset.blend;
+    overlay.style.opacity = btn.dataset.opacity;
+  });
+});
+
+function updateGradient() {
+  var on = document.getElementById('tog-gradient').checked;
+  var start = document.getElementById('sld-grad-start').value;
+  var strength = document.getElementById('sld-grad-strength').value / 100;
+  document.getElementById('val-grad-start').textContent = start;
+  document.getElementById('val-grad-strength').textContent = document.getElementById('sld-grad-strength').value;
+  var g = document.getElementById('layer-gradient');
+  g.style.display = on ? 'block' : 'none';
+  g.style.background = 'linear-gradient(to bottom, transparent ' + start + '%, rgba(0,0,0,' + strength + ') 100%)';
+}
+['tog-gradient','sld-grad-start','sld-grad-strength'].forEach(function(id) {
+  document.getElementById(id).addEventListener(id.startsWith('tog') ? 'change' : 'input', updateGradient);
+});
+updateGradient();
+
+document.getElementById('tog-headline').addEventListener('change', function() {
+  document.getElementById('layer-headline').style.display = this.checked ? 'block' : 'none';
+  document.getElementById('headline-controls').style.display = this.checked ? 'block' : 'none';
+});
+function updateHeadlineY() {
+  var y = document.getElementById('sld-headline-y').value;
+  var l = document.getElementById('layer-headline');
+  l.style.top = y + '%'; l.style.transform = 'translateY(-' + y + '%)';
+  document.getElementById('val-headline-y').textContent = y;
+}
+document.getElementById('sld-headline-y').addEventListener('input', updateHeadlineY);
+updateHeadlineY();
+document.querySelectorAll('.hl-size').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.hl-size').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var el = document.getElementById('headline-content');
+    el.style.fontSize = btn.dataset.px + 'px';
+    el.style.lineHeight = btn.dataset.lh + 'px';
+  });
+});
+
+function updateTextY() {
+  var y = document.getElementById('sld-text-y').value;
+  var l = document.getElementById('layer-text');
+  l.style.bottom = y + '%';
+  l.style.top = 'auto';
+  document.getElementById('val-text-y').textContent = y;
+}
+document.getElementById('sld-text-y').addEventListener('input', updateTextY);
+updateTextY();
+document.querySelectorAll('.body-size').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.body-size').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var el = document.getElementById('text-content');
+    el.style.fontSize = btn.dataset.px + 'px';
+    el.style.lineHeight = btn.dataset.lh + 'px';
+  });
+});
+
+var logoPosition = 'top';
+function updateLogoPos() {
+  var on = document.getElementById('tog-logo').checked;
+  var l = document.getElementById('layer-logo');
+  l.style.display = on ? 'flex' : 'none';
+  l.style.top = logoPosition === 'top' ? '64px' : 'auto';
+  l.style.bottom = logoPosition === 'bottom' ? '64px' : 'auto';
+}
+document.getElementById('tog-logo').addEventListener('change', updateLogoPos);
+document.getElementById('logo-top').addEventListener('click', function() {
+  logoPosition = 'top';
+  document.getElementById('logo-top').classList.add('active');
+  document.getElementById('logo-bottom').classList.remove('active');
+  updateLogoPos();
+});
+document.getElementById('logo-bottom').addEventListener('click', function() {
+  logoPosition = 'bottom';
+  document.getElementById('logo-bottom').classList.add('active');
+  document.getElementById('logo-top').classList.remove('active');
+  updateLogoPos();
+});
+updateLogoPos();
+
+document.getElementById('tog-arrows').addEventListener('change', function() {
+  document.getElementById('layer-arrows').style.display = this.checked ? 'block' : 'none';
+});
+var arrowsPosition = 'top';
+function updateArrowsPos() {
+  var l = document.getElementById('layer-arrows');
+  l.style.top = arrowsPosition === 'top' ? '52px' : 'auto';
+  l.style.bottom = arrowsPosition === 'bottom' ? '52px' : 'auto';
+}
+document.getElementById('arrows-top').addEventListener('click', function() {
+  arrowsPosition = 'top';
+  document.getElementById('arrows-top').classList.add('active');
+  document.getElementById('arrows-bottom').classList.remove('active');
+  updateArrowsPos();
+});
+document.getElementById('arrows-bottom').addEventListener('click', function() {
+  arrowsPosition = 'bottom';
+  document.getElementById('arrows-bottom').classList.add('active');
+  document.getElementById('arrows-top').classList.remove('active');
+  updateArrowsPos();
+});
+
+document.getElementById('export-btn').addEventListener('click', async function() {
+  var btn = document.getElementById('export-btn');
+  btn.textContent = 'Rendering...';
+  btn.disabled = true;
+
+  try {
+    var canvas = document.createElement('canvas');
+    canvas.width = CARD_W;
+    canvas.height = CARD_H;
+    var ctx = canvas.getContext('2d');
+
+    // 1. Background #111
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, CARD_W, CARD_H);
+
+    // helper: load img element onto canvas with blend mode
+    function drawLayer(imgEl, blendMode, opacity) {
+      if (!imgEl || !imgEl.src || imgEl.style.display === 'none') return;
+      ctx.save();
+      ctx.globalCompositeOperation = blendMode || 'source-over';
+      ctx.globalAlpha = opacity !== undefined ? parseFloat(opacity) : 1;
+      ctx.drawImage(imgEl, 0, 0, CARD_W, CARD_H);
+      ctx.restore();
+    }
+
+    // 2. BG image — normal
+    var bgEl = document.getElementById('layer-bg');
+    drawLayer(bgEl, 'source-over', 1);
+
+    // 3. Color overlay — hard-light
+    var overlayEl = document.getElementById('layer-overlay');
+    var overlayBlend = overlayEl.style.mixBlendMode || 'hard-light';
+    var overlayOpacity = overlayEl.style.opacity !== '' ? overlayEl.style.opacity : 1;
+    drawLayer(overlayEl, overlayBlend, overlayOpacity);
+
+    // 4. Grain — luminosity
+    var grainEl = document.getElementById('layer-grain');
+    ctx.save();
+    ctx.globalCompositeOperation = 'luminosity';
+    ctx.globalAlpha = 0.25;
+    ctx.drawImage(grainEl, 0, 0, CARD_W, CARD_H);
+    ctx.restore();
+
+    // 5. Gradient overlay
+    var gradOn = document.getElementById('tog-gradient').checked;
+    if (gradOn) {
+      var start = document.getElementById('sld-grad-start').value;
+      var strength = document.getElementById('sld-grad-strength').value / 100;
+      var grad = ctx.createLinearGradient(0, 0, 0, CARD_H);
+      grad.addColorStop(start / 100, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,' + strength + ')');
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, CARD_W, CARD_H);
+      ctx.restore();
+    }
+
+    // 6. Text/logo layers via html2canvas — transparent bg, only text+logo+arrows
+    var prevBg = card.style.background;
+    card.style.background = 'transparent';
+    var textCanvas = await html2canvas(card, {
+      width: CARD_W, height: CARD_H, scale: 1,
+      useCORS: true, allowTaint: true,
+      backgroundColor: null, logging: false,
+      ignoreElements: function(el) {
+        return el.id === 'layer-bg' || el.id === 'layer-overlay' || el.id === 'layer-grain' || el.id === 'layer-gradient';
+      }
+    });
+    card.style.background = prevBg;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(textCanvas, 0, 0, CARD_W, CARD_H);
+    ctx.restore();
+
+    var a = document.createElement('a');
+    a.download = 'iberia-eclipse-card.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+
+  } catch(err) {
+    alert('Export fehlgeschlagen: ' + err.message);
+    console.error(err);
+  }
+
+  btn.textContent = 'PNG exportieren';
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>
