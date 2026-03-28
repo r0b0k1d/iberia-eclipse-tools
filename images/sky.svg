@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1431.18 1545.02">
+  <defs>
+    <style>
+      .cls-1 {
+        stroke: url(#Degradado_sin_nombre_16-3);
+      }
+
+      .cls-1, .cls-2, .cls-3, .cls-4 {
+        fill: none;
+        stroke-linejoin: round;
+        stroke-width: 6px;
+      }
+
+      .cls-2 {
+        stroke: url(#Degradado_sin_nombre_16-2);
+      }
+
+      .cls-3 {
+        stroke: url(#Degradado_sin_nombre_16-4);
+      }
+
+      .cls-4 {
+        stroke: url(#Degradado_sin_nombre_16);
+      }
+    </style>
+    <linearGradient id="Degradado_sin_nombre_16" data-name="Degradado sin nombre 16" x1="715.59" y1="1545.02" x2="715.59" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#959595"/>
+      <stop offset=".27" stop-color="#c2c2c2"/>
+      <stop offset=".54" stop-color="#7d7d7d"/>
+      <stop offset=".79" stop-color="#fff"/>
+      <stop offset="1" stop-color="#c9c9c9"/>
+    </linearGradient>
+    <linearGradient id="Degradado_sin_nombre_16-2" data-name="Degradado sin nombre 16" x1="6.38" y1="772.51" x2="1424.81" y2="772.51" xlink:href="#Degradado_sin_nombre_16"/>
+    <linearGradient id="Degradado_sin_nombre_16-3" data-name="Degradado sin nombre 16" x1="6.38" y1="772.51" x2="1424.81" y2="772.51" xlink:href="#Degradado_sin_nombre_16"/>
+    <linearGradient id="Degradado_sin_nombre_16-4" data-name="Degradado sin nombre 16" x1="715.59" y1="115.59" x2="715.59" y2="1429.43" xlink:href="#Degradado_sin_nombre_16"/>
+  </defs>
+  <g id="sky">
+    <g id="sky-2" data-name="sky">
+      <ellipse class="cls-4" cx="715.59" cy="772.51" rx="542.28" ry="769.51"/>
+      <path class="cls-2" d="M1099.04,1124.39c-327.48,300.51-764.62,386.58-976.4,192.25C-89.13,1122.3,4.66,721.14,332.14,420.63,659.61,120.12,1096.76,34.05,1308.54,228.39c211.77,194.34,117.98,595.49-209.49,896.01Z"/>
+      <path class="cls-1" d="M1099.04,420.63c327.48,300.51,421.27,701.67,209.49,896.01-211.78,194.34-648.92,108.27-976.4-192.25C4.66,823.88-89.13,422.72,122.64,228.39c211.77-194.34,648.92-108.27,976.4,192.25Z"/>
+      <ellipse class="cls-3" cx="715.59" cy="772.51" rx="712.59" ry="653.92"/>
+    </g>
+  </g>
+</svg>

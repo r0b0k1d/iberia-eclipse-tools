@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blend Mode Tester</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d0d0f; color: #e8e6e0; font-family: monospace; display: flex; height: 100vh; overflow: hidden; }
+
+  #panel {
+    width: 240px; min-width: 240px;
+    background: #18181c;
+    border-right: 1px solid #2a2a30;
+    display: flex; flex-direction: column;
+    overflow-y: auto; padding: 16px; gap: 14px;
+  }
+
+  h1 { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: #e8a832; }
+  .group-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #555; margin-bottom: 6px; }
+
+  #upload-label {
+    display: block; border: 1px dashed #2a2a30; border-radius: 4px;
+    padding: 12px; text-align: center; font-size: 10px; color: #666;
+    cursor: pointer; transition: all 0.2s;
+  }
+  #upload-label:hover { border-color: #e8a832; color: #e8e6e0; }
+  #upload-label.has-image { border-color: #3a3a40; color: #e8a832; }
+  #bg-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .overlay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ov-btn {
+    background: #0d0d0f; border: 1px solid #2a2a30; border-radius: 3px;
+    padding: 6px; font-family: monospace; font-size: 9px; color: #666;
+    cursor: pointer; transition: all 0.15s; text-align: center;
+  }
+  .ov-btn:hover { border-color: #e8a832; color: #e8e6e0; }
+  .ov-btn.active { border-color: #e8a832; color: #e8a832; background: #1e1a10; }
+
+  .blend-group-label { font-size: 8px; color: #444; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; padding-left: 2px; }
+  .blend-grid { display: flex; flex-direction: column; gap: 3px; }
+  .blend-btn {
+    background: #0d0d0f; border: 1px solid #2a2a30; border-radius: 3px;
+    padding: 5px 10px; font-family: monospace; font-size: 9px; color: #666;
+    cursor: pointer; transition: all 0.15s; text-align: left; letter-spacing: 0.06em;
+  }
+  .blend-btn:hover { border-color: #e8a832; color: #e8e6e0; }
+  .blend-btn.active { border-color: #e8a832; color: #e8a832; background: #1e1a10; }
+
+  .slider-row { display: flex; align-items: center; gap: 8px; }
+  .slider-row label { font-size: 9px; color: #666; width: 55px; flex-shrink: 0; text-transform: uppercase; }
+  .slider-row input[type=range] { flex: 1; accent-color: #e8a832; }
+  .slider-row span { font-size: 9px; color: #666; width: 32px; text-align: right; }
+
+  #active-mode { font-size: 9px; color: #e8a832; letter-spacing: 0.1em; text-align: center; padding: 4px 0; border-top: 1px solid #2a2a30; margin-top: 4px; }
+
+  #canvas-area { flex: 1; display: flex; align-items: center; justify-content: center; background: #0a0a0c; }
+
+  .poster {
+    position: relative;
+    width: 540px; height: 675px;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .poster img {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>Blend Tester</h1>
+
+  <div>
+    <div class="group-label">Background</div>
+    <label id="upload-label">
+      <input type="file" id="bg-input" accept="image/*">
+      <span id="bg-label">Bild hochladen</span>
+    </label>
+  </div>
+
+  <div>
+    <div class="group-label">Overlay</div>
+    <div class="overlay-grid">
+      <button class="ov-btn active" data-src="images/01_color-overlay.webp">01</button>
+      <button class="ov-btn"        data-src="images/02_color-overlay.webp">02</button>
+      <button class="ov-btn"        data-src="images/03_color-overlay.webp">03</button>
+      <button class="ov-btn"        data-src="images/04_color-overlay.webp">04</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="group-label">Opacity</div>
+    <div class="slider-row">
+      <label>Overlay</label>
+      <input type="range" id="sld-opacity" min="0" max="100" value="100" step="1" oninput="updateOpacity(this.value)">
+      <span id="val-opacity">100%</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="group-label">Blend Mode</div>
+    <div class="blend-grid">
+      <div class="blend-group-label">Normal</div>
+      <button class="blend-btn" data-mode="normal">normal</button>
+
+      <div class="blend-group-label">Abdunkeln</div>
+      <button class="blend-btn" data-mode="multiply">multiply</button>
+      <button class="blend-btn" data-mode="darken">darken</button>
+      <button class="blend-btn" data-mode="color-burn">color-burn</button>
+
+      <div class="blend-group-label">Aufhellen</div>
+      <button class="blend-btn" data-mode="screen">screen</button>
+      <button class="blend-btn" data-mode="lighten">lighten</button>
+      <button class="blend-btn" data-mode="color-dodge">color-dodge</button>
+
+      <div class="blend-group-label">Kontrast</div>
+      <button class="blend-btn" data-mode="overlay">overlay</button>
+      <button class="blend-btn active" data-mode="soft-light">soft-light</button>
+      <button class="blend-btn" data-mode="hard-light">hard-light</button>
+
+      <div class="blend-group-label">Differenz</div>
+      <button class="blend-btn" data-mode="difference">difference</button>
+      <button class="blend-btn" data-mode="exclusion">exclusion</button>
+
+      <div class="blend-group-label">Komponenten</div>
+      <button class="blend-btn" data-mode="hue">hue</button>
+      <button class="blend-btn" data-mode="saturation">saturation</button>
+      <button class="blend-btn" data-mode="color">color</button>
+      <button class="blend-btn" data-mode="luminosity">luminosity</button>
+    </div>
+  </div>
+
+  <div id="active-mode">soft-light</div>
+</div>
+
+<div id="canvas-area">
+  <div class="poster">
+    <img id="img-bg"      src="" style="display:none; mix-blend-mode:normal;" />
+    <img id="img-overlay" src="images/01_color-overlay.webp" style="mix-blend-mode:soft-light; opacity:1;" />
+    <img id="img-grain"   src="images/grain_luminosity25.webp" style="mix-blend-mode:luminosity; opacity:0.25;" />
+  </div>
+</div>
+
+<script>
+  document.getElementById('bg-input').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const imgBg = document.getElementById('img-bg');
+    imgBg.src = URL.createObjectURL(file);
+    imgBg.style.display = 'block';
+    document.getElementById('bg-label').textContent = '✓ ' + file.name;
+    document.getElementById('upload-label').classList.add('has-image');
+  });
+
+  document.querySelectorAll('.ov-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.ov-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('img-overlay').src = btn.dataset.src;
+    });
+  });
+
+  document.querySelectorAll('.blend-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.blend-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('img-overlay').style.mixBlendMode = btn.dataset.mode;
+      document.getElementById('active-mode').textContent = btn.dataset.mode;
+    });
+  });
+
+  function updateOpacity(val) {
+    document.getElementById('img-overlay').style.opacity = val / 100;
+    document.getElementById('val-opacity').textContent = val + '%';
+  }
+</script>
+
+</body>
+</html>

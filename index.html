@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iberia Eclipse — Tools</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0d0d0d;
+    font-family: monospace;
+    color: #666;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 48px;
+    padding: 40px 24px;
+  }
+
+  .title {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #333;
+  }
+
+  .tools {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .tool-link {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 20px 24px;
+    border: 1px solid #1a1a1a;
+    background: #111;
+    text-decoration: none;
+    transition: border-color 0.15s;
+  }
+
+  .tool-link:hover { border-color: #f35a2a44; }
+
+  .tool-name {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #888;
+  }
+
+  .tool-link:hover .tool-name { color: #f35a2a; }
+
+  .tool-desc {
+    font-size: 10px;
+    color: #333;
+    letter-spacing: 0.05em;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">Iberia Eclipse — Tools</div>
+
+<div class="tools">
+
+  <a class="tool-link" href="artist-tiles.html">
+    <span class="tool-name">
+      <span class="dot" style="background:#feb500;"></span>
+      Artist Tiles
+    </span>
+    <span class="tool-desc">Animated artist tile generator — MP4 export for Instagram Reels/Stories</span>
+  </a>
+
+  <a class="tool-link" href="social_kachel.html">
+    <span class="tool-name">
+      <span class="dot" style="background:#00d3c7;"></span>
+      Social Kachel Generator
+    </span>
+    <span class="tool-desc">Static social media tile generator — PNG export</span>
+  </a>
+
+</div>
+
+</body>
+</html>

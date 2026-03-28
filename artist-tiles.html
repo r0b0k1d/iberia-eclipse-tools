@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animated Artist Tile — R&D</title>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0d0d0d;
+    font-family: monospace;
+    color: #999;
+    min-height: 100vh;
+  }
+
+  /* ── LAYOUT ── */
+  /* Mobile: stacked */
+  .app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 16px 48px;
+  }
+
+  /* Desktop: sidebar left, canvas right */
+  @media (min-width: 1100px) {
+    .app {
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 32px;
+      padding: 32px;
+    }
+    .sidebar {
+      order: 1;
+      width: 320px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 32px;
+      max-height: calc(100vh - 64px);
+      overflow-y: auto;
+    }
+    .canvas-col {
+      order: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 338px;
+  }
+
+  .canvas-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #777;
+    text-align: center;
+  }
+
+  /* ── CANVAS ── */
+  /* Canvas ist immer 338px breit, 600px hoch (9:16).
+     Bei 4:5 Format wird der Wrapper auf 422px Höhe gesetzt
+     und der Canvas mit negativem margin zentriert — clippt oben & unten gleich. */
+  .canvas-crop-wrap {
+    width: 338px;
+    height: 600px;   /* 338 * 16/9 = 600px — 9:16 */
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #000;
+  }
+
+  canvas#preview {
+    display: block;
+    width: 338px;
+    height: auto;
+    background: #000;
+    margin-top: 0;
+  }
+
+  @media (min-width: 1100px) {
+    .canvas-crop-wrap {
+      height: calc(100vh - 80px);
+      width: calc((100vh - 80px) * 9 / 16);
+    }
+    canvas#preview {
+      width: 100%;
+      height: auto;
+    }
+  }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    width: 100%;
+    height: 52px;
+    border: 1px dashed #2a2a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #888;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    user-select: none;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: #f35a2a; color: #f35a2a; }
+  .upload-zone input { display: none; }
+
+  /* ── CONTROLS ── */
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .section-title {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #777;
+    border-bottom: 1px solid #1a1a1a;
+    padding-bottom: 4px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #aaa;
+  }
+
+  .row label { min-width: 90px; flex-shrink: 0; }
+
+  .val { min-width: 36px; text-align: right; color: #888; font-size: 10px; flex-shrink: 0; }
+
+  input[type=range] { flex: 1; accent-color: #f35a2a; min-width: 0; }
+
+  input[type=text] {
+    flex: 1;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    color: #aaa;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 3px 6px;
+    min-width: 0;
+  }
+
+  select {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    color: #999;
+    font-size: 10px;
+    font-family: monospace;
+    padding: 3px 6px;
+  }
+
+  .stage-btns { display: flex; gap: 8px; }
+
+  .stage-btn {
+    flex: 1;
+    padding: 6px 0;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    color: #aaa;
+    font-family: monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .stage-btn:hover { border-color: #888; color: #888; }
+  .stage-btn.active-sun  { background: #feb50022; border-color: #feb500; color: #feb500; }
+  .stage-btn.active-sky  { background: #f35a2a22; border-color: #f35a2a; color: #f35a2a; }
+  .stage-btn.active-moon { background: #00d3c722; border-color: #00d3c7; color: #00d3c7; }
+
+  .export-row { display: flex; gap: 8px; }
+
+  .btn {
+    flex: 1;
+    padding: 9px 0;
+    border: 1px solid #2a2a2a;
+    background: #1a1a1a;
+    color: #aaa;
+    font-family: monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { border-color: #888; color: #888; }
+  .btn.primary { border-color: #f35a2a88; color: #f35a2a; }
+  .btn.primary:hover { background: #f35a2a22; }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .status {
+    font-size: 10px;
+    color: #777;
+    min-height: 14px;
+    text-align: center;
+    width: 338px;
+  }
+  .status.ok  { color: #00d3c7; }
+  .status.err { color: #f35a2a; }
+
+  .progress-wrap {
+    width: 100%;
+    height: 3px;
+    background: #1a1a1a;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .progress-wrap.active { opacity: 1; }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: #f35a2a;
+    transition: width 0.3s linear;
+    border-radius: 2px;
+  }
+
+  .format-btns { display: flex; gap: 6px; }
+  .format-btn {
+    flex: 1;
+    padding: 5px 0;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    color: #777;
+    font-family: monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .format-btn.active { border-color: #f35a2a88; color: #f35a2a; background: #f35a2a11; }
+
+  /* Scrollbar für sidebar */
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-track { background: #111; }
+  .sidebar::-webkit-scrollbar-thumb { background: #2a2a2a; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══ SIDEBAR (Controls) ═══════════════════════════════ -->
+  <div class="sidebar">
+
+    <div class="label">Iberia Eclipse — Artist Tiles</div>
+
+    <!-- Stage -->
+    <div class="section">
+      <div class="section-title">Stage</div>
+      <div class="stage-btns">
+        <button class="stage-btn active-sun" id="btn-sun" onclick="setStage('sun')">☀ Sun</button>
+        <button class="stage-btn" id="btn-sky" onclick="setStage('sky')">◑ Sky</button>
+        <button class="stage-btn" id="btn-moon" onclick="setStage('moon')">● Moon</button>
+      </div>
+    </div>
+
+    <!-- Artist Photo -->
+    <div class="section">
+      <div class="section-title">Artist Photo</div>
+      <div class="upload-zone" id="uploadZone"
+        onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+        <span id="uploadLabel">⬆ Drag & Drop or Click</span>
+      </div>
+      <div class="row">
+        <label>zoom</label>
+        <input type="range" min="100" max="200" value="100" oninput="faceZoom=this.value/100;document.getElementById('vFaceZ').textContent=this.value+'%'">
+        <span class="val" id="vFaceZ">100%</span>
+      </div>
+      <div class="row">
+        <label>position X</label>
+        <input type="range" min="-50" max="50" value="0" oninput="facePanX=this.value/100;document.getElementById('vFacePX').textContent=this.value+'%'">
+        <span class="val" id="vFacePX">0%</span>
+      </div>
+      <div class="row">
+        <label>position Y</label>
+        <input type="range" min="-50" max="50" value="0" oninput="facePanY=this.value/100;document.getElementById('vFacePY').textContent=this.value+'%'">
+        <span class="val" id="vFacePY">0%</span>
+      </div>
+    </div>
+
+    <!-- Text -->
+    <div class="section">
+      <div class="section-title">Text</div>
+      <div class="row" style="align-items:flex-start;">
+        <label style="padding-top:4px;">artist name</label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:3px;">
+          <textarea rows="2" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;font-family:monospace;font-size:11px;padding:3px 6px;resize:none;width:100%;" oninput="artistName=this.value">ARTIST NAME</textarea>
+          <span style="font-size:9px;color:#444;">shift+enter = manual line break</span>
+        </div>
+      </div>
+      <div class="row">
+        <label>name size</label>
+        <input type="range" min="66" max="150" value="80" oninput="artistSize=+this.value;document.getElementById('vAS').textContent=this.value+'px'">
+        <span class="val" id="vAS">80px</span>
+      </div>
+      <div class="row" style="align-items:flex-start;">
+        <label style="padding-top:4px;">crew</label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:3px;">
+          <textarea rows="2" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#aaa;font-family:monospace;font-size:11px;padding:3px 6px;resize:none;width:100%;" oninput="subtitleText=this.value">ARTIST CREW</textarea>
+          <span style="font-size:9px;color:#444;">shift+enter = manual line break</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Format -->
+    <div class="section">
+      <div class="section-title">Format</div>
+      <div class="format-btns">
+        <button class="format-btn active" id="fmt-9-16" onclick="setFormat('9:16')">1080×1920</button>
+        <button class="format-btn" id="fmt-4-5" onclick="setFormat('4:5')">1080×1350</button>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div class="section">
+      <div class="section-title">Export</div>
+      <button class="btn primary" id="btnMp4" onclick="startExport()" style="width:100%;">⬇ Export MP4</button>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ═══ CANVAS COL ══════════════════════════════════════ -->
+  <div class="canvas-col">
+
+    <div class="canvas-crop-wrap" id="canvasCropWrap">
+      <canvas id="preview" width="1080" height="1920"></canvas>
+    </div>
+
+    <div class="status" id="status">loading…</div>
+
+  </div><!-- /canvas-col -->
+
+</div><!-- /app -->
+
+<video id="vidEl" src="videos/solar-eclipse.mp4" autoplay loop muted playsinline
+  style="position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;"></video>
+
+<script>
+const W = 1080;
+const H = 1920;  // intern immer 1920 — Format-Toggle croppt nur die Anzeige
+let currentFormat = '9:16';
+
+const stageData = {
+  sun:  { bg: 'images/sun-bg.webp',  svg: 'images/sun.svg',  title: 'images/sun-stage-title.webp',  color: '#feb500', svgSize: 107, titleScale: 75 },
+  sky:  { bg: 'images/sky-bg.webp',  svg: 'images/sky.svg',  title: 'images/sky-stage-title.webp',  color: '#f35a2a', svgSize: 119, titleScale: 75 },
+  moon: { bg: 'images/moon-bg.webp', svg: 'images/moon.svg', title: 'images/moon-stage-title.webp', color: '#00d3c7', svgSize: 132, titleScale: 75 },
+};
+
+let currentStage  = 'sun';
+const svgOpacity  = 0.35;  // fest
+let vidSize       = 180;
+let vidY          = 0.013;
+let vidOpacity    = 1;
+let faceSize      = 75;
+let faceX         = 0;
+let faceY         = 0;
+let faceZoom      = 1;
+let facePanX      = 0;
+let facePanY      = 0;
+let faceBlend     = 'luminosity';
+let titleY        = 0.21;
+let titleScale    = 60;
+let nameY         = 0.752;  // 0.76 - 15/1920
+let artistName    = 'ARTIST NAME';
+let artistSize    = 80;
+let subtitleText  = 'ARTIST CREW';
+let grainOpacity  = 0.63;
+let grainBlend    = 'soft-light';
+let grainFps      = 15;
+let recordDuration = 10;
+let svgAngle      = 0;
+let lastGrainTs   = 0;
+let grainCanvas   = null;
+let ffmpegLoaded  = false;
+let ffmpegInstance = null;
+let uploadedFace  = null;  // User-uploaded face image
+
+// Montserrat
+const fl = document.createElement('link');
+fl.rel = 'stylesheet';
+fl.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap';
+document.head.appendChild(fl);
+
+// ── ASSETS ───────────────────────────────────────────────────────────
+const assets = {};
+
+function loadImg(src) {
+  if (assets[src]) return Promise.resolve(assets[src]);
+  return new Promise(res => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { assets[src] = img; res(img); };
+    img.onerror = () => { console.warn('Could not load:', src); res(null); };
+    img.src = src;
+  });
+}
+
+async function preload() {
+  const srcs = [
+    'images/sun-bg.webp','images/sky-bg.webp','images/moon-bg.webp',
+    'images/sun.svg','images/sky.svg','images/moon.svg',
+    'images/sun-stage-title.webp','images/sky-stage-title.webp','images/moon-stage-title.webp',
+    'images/info-layer.webp',
+  ];
+  await Promise.all(srcs.map(loadImg));
+  // face.png als Fallback
+  await loadImg('images/face.png');
+  setStatus('✓ bereit', 'ok');
+}
+
+// ── UPLOAD ───────────────────────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('uploadZone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) handleFile(file);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      uploadedFace = img;
+      document.getElementById('uploadLabel').textContent = '✓ ' + file.name;
+      const z = document.getElementById('uploadZone');
+      z.style.color = '#00d3c7';
+      z.style.borderColor = '#00d3c7';
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Drag events müssen auf document-Ebene abgefangen werden
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover',  e => { e.preventDefault(); e.stopPropagation(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', e => { e.stopPropagation(); zone.classList.remove('drag'); });
+  zone.addEventListener('drop',      e => handleDrop(e));
+});
+
+// ── STAGE ────────────────────────────────────────────────────────────
+const vid = document.getElementById('vidEl');
+vid.addEventListener('error', () => setStatus('✗ video error', 'err'));
+
+function setStage(s) {
+  currentStage = s;
+  ['sun','sky','moon'].forEach(x =>
+    document.getElementById('btn-'+x).className = 'stage-btn' + (x===s ? ' active-'+x : ''));
+}
+
+function setFormat(fmt) {
+  currentFormat = fmt;
+  const wrap = document.getElementById('canvasCropWrap');
+  const cvs  = document.getElementById('preview');
+
+  if (fmt === '4:5') {
+    // Canvas rendert bei aktueller Breite mit Verhältnis 1080:1920
+    const canvasW = cvs.getBoundingClientRect().width || 338;
+    const canvasRenderedH = canvasW * 1920 / 1080;
+    const wrapH = canvasW * 1350 / 1080;
+    const offset = -Math.round((canvasRenderedH - wrapH) / 2);
+    wrap.style.height = Math.round(wrapH) + 'px';
+    cvs.style.marginTop = offset + 'px';
+  } else {
+    const canvasW = cvs.getBoundingClientRect().width || 338;
+    wrap.style.height = Math.round(canvasW * 1920 / 1080) + 'px';
+    cvs.style.marginTop = '0px';
+  }
+
+  document.getElementById('fmt-9-16').className = 'format-btn' + (fmt === '9:16' ? ' active' : '');
+  document.getElementById('fmt-4-5').className  = 'format-btn' + (fmt === '4:5'  ? ' active' : '');
+}
+
+// ── DRAW ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('preview');
+const ctx    = canvas.getContext('2d');
+let prevTs   = 0;
+
+function drawScene(ctx, w, h, ts, angle) {
+  const stage = stageData[currentStage];
+  ctx.clearRect(0, 0, w, h);
+
+  // Layer 1: BG
+  const bg = assets[stage.bg];
+  if (bg) { ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; fitCover(ctx,bg,w,h); }
+
+  // Layer 2: SVG rotierend + eingefärbt
+  const svgImg = assets[stage.svg];
+  if (svgImg) {
+    const sz = w * (stage.svgSize / 100);
+    const oc = new OffscreenCanvas(sz, sz);
+    const octx = oc.getContext('2d');
+    octx.drawImage(svgImg, 0, 0, sz, sz);
+    octx.globalCompositeOperation = 'source-in';
+    octx.fillStyle = stage.color;
+    octx.fillRect(0, 0, sz, sz);
+    ctx.save();
+    ctx.globalAlpha = svgOpacity;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.translate(w/2, h/2);
+    ctx.rotate(angle * Math.PI / 180);
+    ctx.drawImage(oc, -sz/2, -sz/2);
+    ctx.restore();
+  }
+
+  // Layer 3: Face kreisförmig maskiert mit Positions- und Zoom-Kontrolle
+  const face = uploadedFace || assets['images/face.png'];
+  if (face) {
+    const r = (w * faceSize / 100) / 2;
+    // Masken-Mittelpunkt (verschiebbar)
+    const cx = w/2 + faceX * w;
+    const cy = h/2 + faceY * h;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = faceBlend;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.clip();
+    // Foto innerhalb der Maske: zoom + pan
+    const fw = face.naturalWidth || face.width;
+    const fh = face.naturalHeight || face.height;
+    const baseScale = Math.max((r*2)/fw, (r*2)/fh);
+    const fs = baseScale * faceZoom;
+    const imgW = fw * fs, imgH = fh * fs;
+    const imgX = cx - imgW/2 + facePanX * r * 2;
+    const imgY = cy - imgH/2 + facePanY * r * 2;
+    ctx.drawImage(face, imgX, imgY, imgW, imgH);
+    ctx.restore();
+  }
+
+  // Layer 4: Eclipse Video (screen) — 1:1, Y-verschiebbar
+  if (vid.readyState >= 2 && vid.videoWidth > 0) {
+    const vw = vid.videoWidth, vh = vid.videoHeight;
+    const targetSize = Math.min(w, h) * (vidSize / 100);
+    const s = Math.max(targetSize/vw, targetSize/vh);
+    const dw = vw*s, dh = vh*s;
+    const centerY = h/2 + vidY * h;
+    ctx.globalAlpha = vidOpacity;
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(vid, (w-dw)/2, centerY-dh/2, dw, dh);
+  }
+
+  // Layer 5: Grain
+  if (!grainCanvas || ts - lastGrainTs >= 1000/grainFps) {
+    grainCanvas = new OffscreenCanvas(w, h);
+    const gctx = grainCanvas.getContext('2d');
+    const id = gctx.createImageData(w, h);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = (Math.random()*160)|0;
+      d[i]=d[i+1]=d[i+2]=v; d[i+3]=Math.round(grainOpacity*255);
+    }
+    gctx.putImageData(id, 0, 0);
+    lastGrainTs = ts;
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = grainBlend;
+  ctx.drawImage(grainCanvas, 0, 0);
+  // Reset nach Grain — wichtig!
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  // Layer 6: Stage Title — WebP direkt zeichnen, keine Einfärbung
+  const titleImg = assets[stage.title];
+  if (titleImg) {
+    // Höhe fest 69px, Breite proportional
+    const targetH = 69;
+    const targetW = titleImg.naturalWidth > 0
+      ? (titleImg.naturalWidth / titleImg.naturalHeight) * targetH
+      : targetH * 6; // fallback aspect ratio
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(titleImg, (w - targetW) / 2, titleY * h - targetH / 2, targetW, targetH);
+  }
+
+  // Layer 7: Artist Name — ALLCAPS, Montserrat Bold, letterSpacing 100, wrapping
+  // Manueller Umbruch via \n möglich, automatisch bei 85% Breite
+  ctx.font = `bold ${artistSize}px 'Montserrat', sans-serif`;
+  ctx.fillStyle = stage.color;
+  ctx.textBaseline = 'top';
+  const nameDrawY = nameY * h;
+  const maxNameW = w * 0.85;
+  const nameLines = artistName.toUpperCase().split('\n').flatMap(seg =>
+    wrapSpacedText(ctx, seg, maxNameW, 100)
+  );
+
+const lightEdgeColor = {
+    sun:  '#ffff00',
+    sky:  '#ffb454',
+    moon: '#00ffff',
+  };
+
+  // Lichtkante: helle Eigenfarbe, 2px nach unten, 100% opacity
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = lightEdgeColor[currentStage];
+  nameLines.forEach((line, i) => {
+    drawSpacedText(ctx, line, w/2, nameDrawY + i * artistSize * 1.1 + 3, 100);
+  });
+
+  // Haupttext: Stage-Farbe, normal
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = stage.color;
+  nameLines.forEach((line, i) => {
+    drawSpacedText(ctx, line, w/2, nameDrawY + i * artistSize * 1.1, 100);
+  });
+
+  const lastNameLineY = nameDrawY + (nameLines.length - 1) * artistSize * 1.1;
+
+  // Layer 8: Crew — feste 36px, wrapping, manueller Umbruch via \n
+  ctx.font = `36px 'Montserrat', sans-serif`;
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  const maxCrewW = w * 0.85;
+  const crewLines = subtitleText.toUpperCase().split('\n').flatMap(seg =>
+    wrapSpacedText(ctx, seg, maxCrewW, 255)
+  );
+  const crewStartY = lastNameLineY + artistSize * 0.8 + 53 - 36 * 0.8;
+  crewLines.forEach((line, i) => {
+    drawSpacedText(ctx, line, w/2, crewStartY + i * 36 * 1.2, 255);
+  });
+
+  // Layer 9: Info-layer
+  const info = assets['images/info-layer.webp'];
+  if (info) { ctx.drawImage(info,0,0,w,h); }
+}
+
+// Text-Wrapping mit letterSpacing — gibt Array von Zeilen zurück
+function lightenColor(hex, amount) {
+  const num = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, (num >> 16) + amount);
+  const g = Math.min(255, ((num >> 8) & 0xff) + amount);
+  const b = Math.min(255, (num & 0xff) + amount);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function wrapSpacedText(ctx, text, maxW, spacing) {
+  const fontSizeMatch = ctx.font.match(/(\d+(?:\.\d+)?)px/);
+  const fontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 40;
+  const spacePx = spacing * fontSize / 1000;
+
+  function lineWidth(words) {
+    const str = words.join(' ');
+    let w = 0;
+    for (let i = 0; i < str.length; i++) {
+      w += ctx.measureText(str[i]).width;
+      if (i < str.length - 1) w += spacePx;
+    }
+    return w;
+  }
+
+  const words = text.split(' ');
+  const lines = [];
+  let current = [];
+
+  for (const word of words) {
+    const test = [...current, word];
+    if (current.length > 0 && lineWidth(test) > maxW) {
+      lines.push(current.join(' '));
+      current = [word];
+    } else {
+      current = test;
+    }
+  }
+  if (current.length) lines.push(current.join(' '));
+  return lines;
+}
+
+function drawSpacedText(ctx, text, cx, y, spacing) {
+  // parseFloat("bold 80px ...") gibt NaN — daher manuell extrahieren
+  const fontSizeMatch = ctx.font.match(/(\d+(?:\.\d+)?)px/);
+  const fontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 40;
+  const spacePx = spacing * fontSize / 1000;
+  let totalW = 0;
+  for (let i = 0; i < text.length; i++) {
+    totalW += ctx.measureText(text[i]).width;
+    if (i < text.length-1) totalW += spacePx;
+  }
+  let x = cx - totalW/2;
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (let i = 0; i < text.length; i++) {
+    ctx.fillText(text[i], x, y);
+    x += ctx.measureText(text[i]).width + (i < text.length-1 ? spacePx : 0);
+  }
+  ctx.textAlign = prevAlign;
+}
+
+function fitCover(ctx, img, w, h) {
+  const sw = img.naturalWidth||img.videoWidth, sh = img.naturalHeight||img.videoHeight;
+  if (!sw||!sh) return;
+  const s = Math.max(w/sw, h/sh);
+  ctx.drawImage(img, (w-sw*s)/2, (h-sh*s)/2, sw*s, sh*s);
+}
+
+function loop(ts) {
+  const dt = Math.min((ts-prevTs)/1000, 0.1);
+  prevTs = ts;
+  svgAngle = (svgAngle + 9*dt) % 360;
+  drawScene(ctx, W, H, ts, svgAngle);
+  requestAnimationFrame(loop);
+}
+
+// ── RECORD ───────────────────────────────────────────────────────────
+async function recordCanvas(onProgress) {
+  const rc = document.createElement('canvas');
+  rc.width = W; rc.height = H;
+  const rctx = rc.getContext('2d');
+
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9' : 'video/webm';
+  const stream   = rc.captureStream(30);
+  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 50_000_000 });
+  const chunks   = [];
+  recorder.ondataavailable = e => { if (e.data.size>0) chunks.push(e.data); };
+
+  vid.currentTime = 0;
+  await vid.play();
+  recorder.start();
+
+  let recAngle = svgAngle;
+  let recLastGrain = 0, recGrainCanvas = null;
+  const recT0 = performance.now();
+  const recStartAngle = svgAngle;
+
+  await new Promise(resolve => {
+    const t0 = performance.now();
+    function frame(ts) {
+      const elapsed = (ts-t0)/1000;
+      // Timestamp-basiert wie im Loop — kein Frame-Rate-Drift
+      recAngle = (recStartAngle + 9 * elapsed) % 360;
+      if (ts-recLastGrain >= 1000/grainFps || !recGrainCanvas) {
+        recGrainCanvas = new OffscreenCanvas(W, H);
+        const rgctx = recGrainCanvas.getContext('2d');
+        const id = rgctx.createImageData(W, H);
+        const d = id.data;
+        for (let i=0;i<d.length;i+=4){const v=(Math.random()*160)|0;d[i]=d[i+1]=d[i+2]=v;d[i+3]=Math.round(grainOpacity*255);}
+        rgctx.putImageData(id,0,0);
+        recLastGrain = ts;
+      }
+      const saved = grainCanvas;
+      grainCanvas = recGrainCanvas;
+      drawScene(rctx, W, H, ts, recAngle);
+      grainCanvas = saved;
+      const progress = Math.min(elapsed / recordDuration, 1);
+      if (onProgress) onProgress(progress);
+      setStatus('⏺ ' + Math.max(0, recordDuration-elapsed).toFixed(1) + 's…');
+      if (elapsed < recordDuration) requestAnimationFrame(frame);
+      else { recorder.stop(); vid.pause(); resolve(); }
+    }
+    requestAnimationFrame(frame);
+  });
+  await new Promise(r => { recorder.onstop = r; });
+  return new Blob(chunks, { type: mimeType });
+}
+
+// ── EXPORT ───────────────────────────────────────────────────────────
+function setProgress(pct) {
+  const wrap = document.getElementById('progressWrap');
+  const bar  = document.getElementById('progressBar');
+  if (pct === null) { wrap.classList.remove('active'); bar.style.width='0%'; return; }
+  wrap.classList.add('active');
+  bar.style.width = Math.min(100, pct) + '%';
+}
+
+async function startExport() {
+  const btn = document.getElementById('btnMp4');
+  btn.disabled = true;
+  setProgress(0);
+  try {
+    // Phase 1: Recording 0–50%
+    const webmBlob = await recordCanvas(p => setProgress(p * 50));
+
+    // Phase 2: FFmpeg 50–100%
+    setStatus('⏳ Konvertiere zu MP4…');
+    setProgress(50);
+    const ff = await getFFmpeg();
+
+    ff.setLogger(({ type, message }) => {
+      if (type === 'fferr') {
+        const m = message.match(/time=(\d+):(\d+):(\d+\.\d+)/);
+        if (m) {
+          const t = parseInt(m[1])*3600 + parseInt(m[2])*60 + parseFloat(m[3]);
+          setProgress(50 + Math.min((t / recordDuration) * 50, 49));
+        }
+      }
+    });
+
+    ff.FS('writeFile','input.webm', await window._fetchFile(webmBlob));
+    const cropFilter = currentFormat === '4:5' ? ['-vf', 'crop=1080:1350:0:285'] : [];
+    await ff.run(
+      '-r', '30', '-i', 'input.webm',
+      '-c:v', 'libx264', '-preset', 'slow',
+      '-crf', '10', '-pix_fmt', 'yuv420p',
+      ...cropFilter,
+      '-r', '30', '-movflags', '+faststart',
+      'output.mp4'
+    );
+    const mp4Data = ff.FS('readFile','output.mp4');
+    const mp4Blob = new Blob([mp4Data.buffer],{type:'video/mp4'});
+    ff.FS('unlink','input.webm'); ff.FS('unlink','output.mp4');
+    dl(mp4Blob,'artist_tile_insta.mp4');
+    setProgress(100);
+    setStatus('✓ MP4 '+(mp4Blob.size/1024/1024).toFixed(1)+'MB','ok');
+    setTimeout(() => setProgress(null), 2000);
+  } catch(e) {
+    setStatus('✗ '+(e?.message||e?.toString()||'Fehler'),'err');
+    setProgress(null);
+    console.error(e);
+  } finally { btn.disabled = false; }
+}
+
+async function getFFmpeg() {
+  if (ffmpegLoaded) return ffmpegInstance;
+  setStatus('⏳ Lade FFmpeg…');
+  const { createFFmpeg, fetchFile } = FFmpeg;
+  const port = window.location.port || '80';
+  ffmpegInstance = createFFmpeg({ log: false, corePath: `http://localhost:${port}/ffmpeg/ffmpeg-core.js` });
+  await ffmpegInstance.load();
+  ffmpegLoaded = true;
+  window._fetchFile = fetchFile;
+  setStatus('✓ FFmpeg bereit', 'ok');
+  return ffmpegInstance;
+}
+
+function dl(blob, name) {
+  const u=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=u; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(u),3000);
+}
+
+function copyValues() {
+  const vals = {
+    stage:       currentStage,
+    svgOpacity,
+    vidSize,     vidY,        vidOpacity,
+    faceSize,    faceX,       faceY,
+    faceZoom,    facePanX,    facePanY,   faceBlend,
+    titleY,
+    nameY,       artistName,  artistSize, subtitleText,
+    grainOpacity,grainBlend,  grainFps,
+  };
+  const text = JSON.stringify(vals, null, 2);
+  navigator.clipboard.writeText(text).then(() => {
+    setStatus('✓ Werte in Zwischenablage kopiert', 'ok');
+  }).catch(() => {
+    // Fallback: in neuem Fenster anzeigen
+    const w = window.open('','_blank','width=500,height=600');
+    w.document.write('<pre style="background:#111;color:#0f0;padding:20px;font-size:12px;">' + text + '</pre>');
+    setStatus('✓ Werte in neuem Fenster', 'ok');
+  });
+}
+
+function setStatus(msg, type='') {
+  const el=document.getElementById('status');
+  el.textContent=msg; el.className='status '+type;
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────
+preload().then(() => {
+  requestAnimationFrame(ts => { prevTs=ts; loop(ts); });
+});
+
+// Format bei Fenster-Resize neu berechnen
+const resizeObserver = new ResizeObserver(() => {
+  setFormat(currentFormat);
+});
+resizeObserver.observe(document.getElementById('preview'));
+</script>
+</body>
+</html>

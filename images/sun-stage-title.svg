@@ -1,0 +1,22 @@
+{
+  "stage": "sun",
+  "svgOpacity": 0.35,
+  "vidSize": 180,
+  "vidY": 0.013,
+  "vidOpacity": 1,
+  "faceSize": 75,
+  "faceX": 0,
+  "faceY": 0,
+  "faceZoom": 1,
+  "facePanX": 0,
+  "facePanY": 0,
+  "faceBlend": "luminosity",
+  "titleY": 0.21,
+  "nameY": 0.77,
+  "artistName": "ARTIST NAME",
+  "artistSize": 80,
+  "subtitleText": "ARTIST CREW",
+  "grainOpacity": 0.66,
+  "grainBlend": "soft-light",
+  "grainFps": 20
+}
