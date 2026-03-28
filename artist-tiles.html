@@ -852,7 +852,7 @@ async function getFFmpeg() {
   setStatus('⏳ Lade FFmpeg…');
   const { createFFmpeg, fetchFile } = FFmpeg;
   const port = window.location.port || '80';
-  ffmpegInstance = createFFmpeg({ log: false, corePath: `http://localhost:${port}/ffmpeg/ffmpeg-core.js` });
+  ffmpegInstance = createFFmpeg({ log: false, corePath: `${location.origin}/ffmpeg/ffmpeg-core.js` });
   await ffmpegInstance.load();
   ffmpegLoaded = true;
   window._fetchFile = fetchFile;
