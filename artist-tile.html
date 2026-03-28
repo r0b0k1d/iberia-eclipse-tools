@@ -273,16 +273,22 @@
 <body>
 
 <div id="mobileOverlay" style="display:none;position:fixed;inset:0;background:#0d0d0d;z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:40px;text-align:center;">
-  <div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#333;">Iberia Eclipse — Artist Tile Generator</div>
-  <div style="font-size:32px;">🖥</div>
-  <div style="font-size:13px;color:#888;letter-spacing:0.05em;line-height:1.8;">This tool requires a desktop browser.</div>
-  <div style="font-size:10px;color:#444;letter-spacing:0.05em;">Please open on a Mac or PC.</div>
+  <div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#555;">Iberia Eclipse — Artist Tile Generator</div>
+  <div style="font-size:40px;line-height:1;">🖥</div>
+  <div style="font-size:14px;color:#999;letter-spacing:0.05em;line-height:1.8;">This tool requires a desktop browser.</div>
+  <div style="font-size:11px;color:#555;letter-spacing:0.05em;">Please open on a Mac or PC.</div>
 </div>
 
 <script>
-if (/Mobi|Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent)) {
-  document.getElementById('mobileOverlay').style.display = 'flex';
-}
+(function() {
+  var isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+                 (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.userAgent) === false);
+  if (isMobile) {
+    var el = document.getElementById('mobileOverlay');
+    el.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+})();
 </script>
 
 <div class="app">
