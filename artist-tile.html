@@ -245,9 +245,9 @@
     font-size: 10px;
     color: #666;
     text-align: center;
-    margin-top: 4px;
-    min-height: 14px;
+    display: none;
   }
+  .progress-pct:not(:empty) { display: block; }
 
   .format-btns { display: flex; gap: 6px; }
   .format-btn {
@@ -369,11 +369,14 @@
     <!-- Export -->
     <div class="section">
       <div class="section-title">Export</div>
-      <button class="btn primary" id="btnMp4" onclick="startExport()" style="width:100%;">⬇ Export MP4</button>
-      <div class="progress-wrap" id="progressWrap">
-        <div class="progress-bar" id="progressBar"></div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="btn primary" id="btnMp4" onclick="startExport()" style="width:100%;">⬇ Export MP4</button>
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="progress-pct" id="progressPct"></div>
+        <button class="btn" onclick="exportJpg()" style="width:100%;">⬇ Export JPG</button>
       </div>
-      <div class="progress-pct" id="progressPct"></div>
     </div>
 
   </div><!-- /sidebar -->
@@ -892,6 +895,32 @@ async function getFFmpeg() {
   window._fetchFile = fetchFile;
   setStatus('✓ FFmpeg bereit', 'ok');
   return ffmpegInstance;
+}
+
+function exportJpg() {
+  const cvs = document.getElementById('preview');
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const dd = String(now.getDate()).padStart(2,'0');
+  const cleanName = artistName.replace(/\s+/g,'').replace(/\n/g,'').toUpperCase();
+  // Für 4:5 format: Canvas auf temporärem Canvas croppen
+  let exportCanvas = cvs;
+  if (currentFormat === '4:5') {
+    const tmp = document.createElement('canvas');
+    tmp.width  = W;
+    tmp.height = 1350;
+    const tctx = tmp.getContext('2d');
+    tctx.drawImage(cvs, 0, (H-1350)/2, W, 1350, 0, 0, W, 1350);
+    exportCanvas = tmp;
+  }
+  const filename = `${yy}${mm}${dd}_IE-${cleanName}_tile.jpg`;
+  const a = document.createElement('a');
+  a.href = exportCanvas.toDataURL('image/jpeg', 0.95);
+  a.download = filename;
+  a.click();
+  setStatus('✓ JPG exported', 'ok');
+  setTimeout(() => setStatus(''), 2000);
 }
 
 function dl(blob, name) {
