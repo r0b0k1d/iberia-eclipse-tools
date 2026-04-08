@@ -79,7 +79,7 @@
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Montserrat:wght@100;600;900&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
 </head>
 <body>
 
@@ -437,72 +437,169 @@ document.getElementById('export-btn').addEventListener('click', async function()
     canvas.height = CARD_H;
     var ctx = canvas.getContext('2d');
 
+    // Helper: load an Image from src (handles base64 and blob URLs)
+    function loadImg(src) {
+      return new Promise(function(resolve, reject) {
+        if (!src) return resolve(null);
+        var img = new Image();
+        img.onload = function() { resolve(img); };
+        img.onerror = function() { resolve(null); };
+        img.src = src;
+      });
+    }
+
+    // Helper: draw image layer with blend mode + opacity
+    function drawLayer(img, blendMode, opacity) {
+      if (!img) return;
+      ctx.save();
+      ctx.globalCompositeOperation = blendMode || 'source-over';
+      ctx.globalAlpha = opacity !== undefined ? parseFloat(opacity) : 1;
+      ctx.drawImage(img, 0, 0, CARD_W, CARD_H);
+      ctx.restore();
+    }
+
+    // Helper: parse computed pixel size from an element
+    function getPx(el, prop) {
+      return parseFloat(window.getComputedStyle(el)[prop]) || 0;
+    }
+
     // 1. Background #111
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-    // helper: load img element onto canvas with blend mode
-    function drawLayer(imgEl, blendMode, opacity) {
-      if (!imgEl || !imgEl.src || imgEl.style.display === 'none') return;
-      ctx.save();
-      ctx.globalCompositeOperation = blendMode || 'source-over';
-      ctx.globalAlpha = opacity !== undefined ? parseFloat(opacity) : 1;
-      ctx.drawImage(imgEl, 0, 0, CARD_W, CARD_H);
-      ctx.restore();
+    // 2. BG photo
+    var bgEl = document.getElementById('layer-bg');
+    if (bgEl.src && bgEl.style.display !== 'none') {
+      var bgImg = await loadImg(bgEl.src);
+      drawLayer(bgImg, 'source-over', 1);
     }
 
-    // 2. BG image — normal
-    var bgEl = document.getElementById('layer-bg');
-    drawLayer(bgEl, 'source-over', 1);
-
-    // 3. Color overlay — hard-light
+    // 3. Color overlay
     var overlayEl = document.getElementById('layer-overlay');
-    var overlayBlend = overlayEl.style.mixBlendMode || 'hard-light';
-    var overlayOpacity = overlayEl.style.opacity !== '' ? overlayEl.style.opacity : 1;
-    drawLayer(overlayEl, overlayBlend, overlayOpacity);
+    if (overlayEl.src) {
+      var overlayImg = await loadImg(overlayEl.src);
+      var overlayBlend = overlayEl.style.mixBlendMode || 'hard-light';
+      var overlayOpacity = overlayEl.style.opacity !== '' ? parseFloat(overlayEl.style.opacity) : 1;
+      drawLayer(overlayImg, overlayBlend, overlayOpacity);
+    }
 
-    // 4. Grain — luminosity
+    // 4. Grain
     var grainEl = document.getElementById('layer-grain');
-    ctx.save();
-    ctx.globalCompositeOperation = 'luminosity';
-    ctx.globalAlpha = 0.25;
-    ctx.drawImage(grainEl, 0, 0, CARD_W, CARD_H);
-    ctx.restore();
+    if (grainEl.src) {
+      var grainImg = await loadImg(grainEl.src);
+      drawLayer(grainImg, 'luminosity', 0.25);
+    }
 
-    // 5. Gradient overlay
+    // 5. Gradient
     var gradOn = document.getElementById('tog-gradient').checked;
     if (gradOn) {
-      var start = document.getElementById('sld-grad-start').value;
-      var strength = document.getElementById('sld-grad-strength').value / 100;
+      var gradStart = parseFloat(document.getElementById('sld-grad-start').value) / 100;
+      var gradStrength = parseFloat(document.getElementById('sld-grad-strength').value) / 100;
       var grad = ctx.createLinearGradient(0, 0, 0, CARD_H);
-      grad.addColorStop(start / 100, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,' + strength + ')');
+      grad.addColorStop(gradStart, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,' + gradStrength + ')');
       ctx.save();
       ctx.globalCompositeOperation = 'multiply';
-      ctx.globalAlpha = 1;
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, CARD_W, CARD_H);
       ctx.restore();
     }
 
-    // 6. Text/logo layers via html2canvas — transparent bg, only text+logo+arrows
-    var prevBg = card.style.background;
-    card.style.background = 'transparent';
-    var textCanvas = await html2canvas(card, {
-      width: CARD_W, height: CARD_H, scale: 1,
-      useCORS: true, allowTaint: true,
-      backgroundColor: null, logging: false,
-      ignoreElements: function(el) {
-        return el.id === 'layer-bg' || el.id === 'layer-overlay' || el.id === 'layer-grain' || el.id === 'layer-gradient';
-      }
-    });
-    card.style.background = prevBg;
+    // --- From here: all text/logo rendered natively at full 1080×1350 ---
+    // The card is scaled down visually via CSS transform — we must read
+    // layout values as percentages / logical px (pre-scale) and re-apply
+    // at full CARD_W × CARD_H resolution.
+
+    var SCALE = CARD_W / card.offsetWidth; // visual→canvas scale factor
+
+    // 6. Headline
+    var headlineLayer = document.getElementById('layer-headline');
+    if (headlineLayer.style.display !== 'none') {
+      var hContent = document.getElementById('headline-content');
+      var hStyle = window.getComputedStyle(hContent);
+      var hFontSize = parseFloat(hStyle.fontSize) * SCALE;
+      var hLineHeight = parseFloat(hStyle.lineHeight) * SCALE;
+      var hPadding = 72; // matches CSS padding:0 72px — already in card px
+      var hTopPct = parseFloat(headlineLayer.style.top) / 100;
+      var hTransY = parseFloat(headlineLayer.style.transform.replace(/[^0-9.-]/g,'')) / 100;
+      var hTop = hTopPct * CARD_H - hTransY * CARD_H;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#fff';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+
+      // Render rich text (bold/normal) by walking child nodes
+      renderRichText(ctx, hContent, hFontSize, hLineHeight, hPadding, hTop, CARD_W - hPadding * 2, 'Montserrat', 'uppercase');
+      ctx.restore();
+    }
+
+    // 7. Body text
+    var textLayer = document.getElementById('layer-text');
+    var tContent = document.getElementById('text-content');
+    var tStyle = window.getComputedStyle(tContent);
+    var tFontSize = parseFloat(tStyle.fontSize) * SCALE;
+    var tLineHeight = parseFloat(tStyle.lineHeight) * SCALE;
+    var tPadding = 72;
+    var tBottomPct = parseFloat(textLayer.style.bottom) / 100;
+    // We need to measure text height to position from bottom
+    var tLines = getTextLines(tContent, CARD_W - tPadding * 2, tFontSize, tLineHeight, 'Montserrat');
+    var tBlockHeight = tLines.length * tLineHeight;
+    var tTop = CARD_H - tBottomPct * CARD_H - tBlockHeight;
+
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.drawImage(textCanvas, 0, 0, CARD_W, CARD_H);
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'top';
+    renderRichText(ctx, tContent, tFontSize, tLineHeight, tPadding, tTop, CARD_W - tPadding * 2, 'Montserrat', 'uppercase');
     ctx.restore();
 
+    // 8. Logo
+    var logoLayer = document.getElementById('layer-logo');
+    var logoImg2 = document.getElementById('logo-img');
+    if (logoLayer.style.display !== 'none' && logoImg2.src) {
+      var logoSrc = logoImg2.src;
+      var logoLoadedImg = await loadImg(logoSrc);
+      if (logoLoadedImg) {
+        var logoW = 320; // CSS width of logo-img in card px
+        var logoH = logoW * (logoLoadedImg.naturalHeight / logoLoadedImg.naturalWidth);
+        var logoX = (CARD_W - logoW) / 2;
+        var logoTopStyle = logoLayer.style.top;
+        var logoBottomStyle = logoLayer.style.bottom;
+        var logoY = logoTopStyle && logoTopStyle !== 'auto'
+          ? parseFloat(logoTopStyle)
+          : CARD_H - parseFloat(logoBottomStyle) - logoH;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(logoLoadedImg, logoX, logoY, logoW, logoH);
+        ctx.restore();
+      }
+    }
+
+    // 9. Arrows
+    var arrowsLayer = document.getElementById('layer-arrows');
+    if (arrowsLayer.style.display !== 'none') {
+      var arrowStyle = window.getComputedStyle(arrowsLayer);
+      var arrowFontSize = parseFloat(arrowStyle.fontSize) * SCALE;
+      var arrowTopStyle = arrowsLayer.style.top;
+      var arrowBottomStyle = arrowsLayer.style.bottom;
+      var arrowTop = arrowTopStyle && arrowTopStyle !== 'auto'
+        ? parseFloat(arrowTopStyle)
+        : CARD_H - parseFloat(arrowBottomStyle) - arrowFontSize;
+      var arrowRight = 64;
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#fff';
+      ctx.font = '900 ' + arrowFontSize + 'px Montserrat';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'right';
+      ctx.fillText(arrowsLayer.textContent.trim(), CARD_W - arrowRight, arrowTop);
+      ctx.restore();
+    }
+
+    // Download
     var a = document.createElement('a');
     a.download = 'iberia-eclipse-card.png';
     a.href = canvas.toDataURL('image/png');
@@ -513,9 +610,90 @@ document.getElementById('export-btn').addEventListener('click', async function()
     console.error(err);
   }
 
-  btn.textContent = 'PNG exportieren';
+  btn.textContent = '↓ Export PNG';
   btn.disabled = false;
 });
+
+// ── Text rendering helpers ────────────────────────────────────────────────────
+
+// Walk contenteditable nodes and return an array of {text, bold} segments per line
+function getSegments(el) {
+  var segments = [];
+  function walk(node, bold) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      var txt = node.textContent;
+      if (txt) segments.push({ text: txt, bold: bold });
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      var tag = node.tagName.toLowerCase();
+      var isBold = bold || tag === 'b' || tag === 'strong';
+      if (tag === 'br') { segments.push({ text: '\n', bold: bold }); return; }
+      node.childNodes.forEach(function(c) { walk(c, isBold); });
+      if (tag === 'div' || tag === 'p') segments.push({ text: '\n', bold: bold });
+    }
+  }
+  el.childNodes.forEach(function(c) { walk(c, false); });
+  return segments;
+}
+
+// Word-wrap segments into lines of {runs:[{text,bold}]}
+function getTextLines(el, maxWidth, fontSize, lineHeight, fontFamily) {
+  var segments = getSegments(el);
+  // Flatten to raw text with bold markers, then word-wrap
+  // We use a temp canvas for measurement
+  var tmpCtx = document.createElement('canvas').getContext('2d');
+  function measureWord(word, bold) {
+    tmpCtx.font = (bold ? '600 ' : '100 ') + fontSize + 'px ' + fontFamily;
+    return tmpCtx.measureText(word.toUpperCase()).width;
+  }
+
+  var lines = [];
+  var currentLine = [];
+  var currentWidth = 0;
+  var spaceWidth = measureWord(' ', false);
+
+  function flush() { lines.push({ runs: currentLine }); currentLine = []; currentWidth = 0; }
+
+  segments.forEach(function(seg) {
+    if (seg.text === '\n') { flush(); return; }
+    var words = seg.text.split(/(\s+)/);
+    words.forEach(function(word) {
+      if (!word) return;
+      if (/^\s+$/.test(word)) {
+        currentWidth += spaceWidth;
+        if (currentLine.length) currentLine[currentLine.length-1].text += ' ';
+        return;
+      }
+      var w = measureWord(word, seg.bold);
+      if (currentWidth + w > maxWidth && currentLine.length) { flush(); }
+      if (currentLine.length && currentLine[currentLine.length-1].bold === seg.bold) {
+        currentLine[currentLine.length-1].text += word;
+      } else {
+        currentLine.push({ text: word, bold: seg.bold });
+      }
+      currentWidth += w;
+    });
+  });
+  if (currentLine.length) flush();
+  // Remove trailing empty lines
+  while (lines.length && lines[lines.length-1].runs.every(function(r){ return !r.text.trim(); })) lines.pop();
+  return lines;
+}
+
+function renderRichText(ctx, el, fontSize, lineHeight, paddingX, startY, maxWidth, fontFamily, textTransform) {
+  var lines = getTextLines(el, maxWidth, fontSize, lineHeight, fontFamily);
+  var y = startY;
+  lines.forEach(function(line) {
+    var x = paddingX;
+    line.runs.forEach(function(run) {
+      var txt = textTransform === 'uppercase' ? run.text.toUpperCase() : run.text;
+      ctx.font = (run.bold ? '600 ' : '100 ') + fontSize + 'px ' + fontFamily;
+      ctx.letterSpacing = Math.round(fontSize * 0.16) + 'px';
+      ctx.fillText(txt, x, y);
+      x += ctx.measureText(txt).width;
+    });
+    y += lineHeight;
+  });
+}
 </script>
 </body>
 </html>
