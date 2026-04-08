@@ -467,11 +467,19 @@ document.getElementById('export-btn').addEventListener('click', async function()
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-    // 2. BG photo
+    // 2. BG photo — object-fit: cover
     var bgEl = document.getElementById('layer-bg');
     if (bgEl.src && bgEl.style.display !== 'none') {
       var bgImg = await loadImg(bgEl.src);
-      drawLayer(bgImg, 'source-over', 1);
+      if (bgImg) {
+        var iw = bgImg.naturalWidth, ih = bgImg.naturalHeight;
+        var scale = Math.max(CARD_W / iw, CARD_H / ih);
+        var dw = iw * scale, dh = ih * scale;
+        var dx = (CARD_W - dw) / 2, dy = (CARD_H - dh) / 2;
+        ctx.save();
+        ctx.drawImage(bgImg, dx, dy, dw, dh);
+        ctx.restore();
+      }
     }
 
     // 3. Color overlay
@@ -514,39 +522,36 @@ document.getElementById('export-btn').addEventListener('click', async function()
 
     // 6. Headline
     var headlineLayer = document.getElementById('layer-headline');
-    if (headlineLayer.style.display !== 'none') {
+    if (headlineLayer.style.display === 'block') {
       var hContent = document.getElementById('headline-content');
       var hStyle = window.getComputedStyle(hContent);
       var hFontSize = parseFloat(hStyle.fontSize) * SCALE;
       var hLineHeight = parseFloat(hStyle.lineHeight) * SCALE;
-      var hPadding = 72; // matches CSS padding:0 72px — already in card px
-      var hTopPct = parseFloat(headlineLayer.style.top) / 100;
-      var hTransY = parseFloat(headlineLayer.style.transform.replace(/[^0-9.-]/g,'')) / 100;
-      var hTop = hTopPct * CARD_H - hTransY * CARD_H;
+      var hPadding = 72;
+      // Use real DOM position — getBoundingClientRect gives sub-pixel accurate top
+      var hRect = hContent.getBoundingClientRect();
+      var cardRect = card.getBoundingClientRect();
+      var hTop = (hRect.top - cardRect.top) * SCALE;
 
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = '#fff';
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
-
-      // Render rich text (bold/normal) by walking child nodes
       renderRichText(ctx, hContent, hFontSize, hLineHeight, hPadding, hTop, CARD_W - hPadding * 2, 'Montserrat', 'uppercase');
       ctx.restore();
     }
 
-    // 7. Body text
+    // 7. Body text — also use real DOM position
     var textLayer = document.getElementById('layer-text');
     var tContent = document.getElementById('text-content');
     var tStyle = window.getComputedStyle(tContent);
     var tFontSize = parseFloat(tStyle.fontSize) * SCALE;
     var tLineHeight = parseFloat(tStyle.lineHeight) * SCALE;
     var tPadding = 72;
-    var tBottomPct = parseFloat(textLayer.style.bottom) / 100;
-    // We need to measure text height to position from bottom
-    var tLines = getTextLines(tContent, CARD_W - tPadding * 2, tFontSize, tLineHeight, 'Montserrat');
-    var tBlockHeight = tLines.length * tLineHeight;
-    var tTop = CARD_H - tBottomPct * CARD_H - tBlockHeight;
+    var tRect = tContent.getBoundingClientRect();
+    var cardRect2 = card.getBoundingClientRect();
+    var tTop = (tRect.top - cardRect2.top) * SCALE;
 
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
@@ -638,12 +643,14 @@ function getSegments(el) {
 // Word-wrap segments into lines of {runs:[{text,bold}]}
 function getTextLines(el, maxWidth, fontSize, lineHeight, fontFamily) {
   var segments = getSegments(el);
-  // Flatten to raw text with bold markers, then word-wrap
-  // We use a temp canvas for measurement
   var tmpCtx = document.createElement('canvas').getContext('2d');
+  // letterSpacing = 0.16em per character — ctx.measureText ignores it, so we add it manually
+  var LETTER_SPACING = fontSize * 0.16;
   function measureWord(word, bold) {
     tmpCtx.font = (bold ? '600 ' : '100 ') + fontSize + 'px ' + fontFamily;
-    return tmpCtx.measureText(word.toUpperCase()).width;
+    var w = tmpCtx.measureText(word.toUpperCase()).width;
+    w += LETTER_SPACING * word.length;
+    return w;
   }
 
   var lines = [];
@@ -681,15 +688,16 @@ function getTextLines(el, maxWidth, fontSize, lineHeight, fontFamily) {
 
 function renderRichText(ctx, el, fontSize, lineHeight, paddingX, startY, maxWidth, fontFamily, textTransform) {
   var lines = getTextLines(el, maxWidth, fontSize, lineHeight, fontFamily);
-  var y = startY;
+  // alphabetic baseline: offset by ~0.8 of fontSize so first line sits at startY visually
+  var y = startY + fontSize * 0.8;
   lines.forEach(function(line) {
     var x = paddingX;
     line.runs.forEach(function(run) {
       var txt = textTransform === 'uppercase' ? run.text.toUpperCase() : run.text;
       ctx.font = (run.bold ? '600 ' : '100 ') + fontSize + 'px ' + fontFamily;
-      ctx.letterSpacing = Math.round(fontSize * 0.16) + 'px';
+      ctx.letterSpacing = (fontSize * 0.16) + 'px';
       ctx.fillText(txt, x, y);
-      x += ctx.measureText(txt).width;
+      x += ctx.measureText(txt).width + (fontSize * 0.16 * txt.length);
     });
     y += lineHeight;
   });
