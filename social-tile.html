@@ -518,46 +518,57 @@ document.getElementById('export-btn').addEventListener('click', async function()
     // layout values as percentages / logical px (pre-scale) and re-apply
     // at full CARD_W × CARD_H resolution.
 
-    var SCALE = CARD_W / card.offsetWidth; // visual→canvas scale factor
+    // offsetTop is layout-based (not viewport), works correctly on all screen sizes.
+    // For translateY we read the matrix from computedStyle.transform.
+
+    // ── Read state directly from UI controls — no DOM position queries ──────────
+
+    // Headline
+    var headlineOn = document.getElementById('tog-headline').checked;
+    var headlineYPct = parseFloat(document.getElementById('sld-headline-y').value) / 100;
+    var activeHlSize = document.querySelector('.hl-size.active');
+    var hlFontSize = activeHlSize ? parseFloat(activeHlSize.dataset.px) : 47;
+    var hlLineHeight = activeHlSize ? parseFloat(activeHlSize.dataset.lh) : 63;
+
+    // Body text
+    var textYPct = parseFloat(document.getElementById('sld-text-y').value) / 100;
+    var activeBodySize = document.querySelector('.body-size.active');
+    var bodyFontSize = activeBodySize ? parseFloat(activeBodySize.dataset.px) : 47;
+    var bodyLineHeight = activeBodySize ? parseFloat(activeBodySize.dataset.lh) : 63;
 
     // 6. Headline
-    var headlineLayer = document.getElementById('layer-headline');
-    if (headlineLayer.style.display === 'block') {
+    if (headlineOn) {
       var hContent = document.getElementById('headline-content');
-      var hStyle = window.getComputedStyle(hContent);
-      var hFontSize = parseFloat(hStyle.fontSize) * SCALE;
-      var hLineHeight = parseFloat(hStyle.lineHeight) * SCALE;
       var hPadding = 72;
-      // Use real DOM position — getBoundingClientRect gives sub-pixel accurate top
-      var hRect = hContent.getBoundingClientRect();
-      var cardRect = card.getBoundingClientRect();
-      var hTop = (hRect.top - cardRect.top) * SCALE;
+      var hLines = getTextLines(hContent, CARD_W - hPadding * 2, hlFontSize, hlLineHeight, 'Montserrat');
+      var hBlockHeight = hLines.length * hlLineHeight;
+      // CSS: top = y%, translateY(-y%) → top of block = y% * CARD_H - y% * blockHeight
+      // + half-leading: browser centers text in lineHeight, canvas 'top' starts at em-square top
+      var hTop = (headlineYPct * CARD_H) - (headlineYPct * hBlockHeight) + (hlLineHeight - hlFontSize) / 2;
 
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = '#fff';
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
-      renderRichText(ctx, hContent, hFontSize, hLineHeight, hPadding, hTop, CARD_W - hPadding * 2, 'Montserrat', 'uppercase');
+      renderRichText(ctx, hContent, hlFontSize, hlLineHeight, hPadding, hTop, CARD_W - hPadding * 2, 'Montserrat', 'uppercase');
       ctx.restore();
     }
 
-    // 7. Body text — also use real DOM position
-    var textLayer = document.getElementById('layer-text');
+    // 7. Body text
     var tContent = document.getElementById('text-content');
-    var tStyle = window.getComputedStyle(tContent);
-    var tFontSize = parseFloat(tStyle.fontSize) * SCALE;
-    var tLineHeight = parseFloat(tStyle.lineHeight) * SCALE;
     var tPadding = 72;
-    var tRect = tContent.getBoundingClientRect();
-    var cardRect2 = card.getBoundingClientRect();
-    var tTop = (tRect.top - cardRect2.top) * SCALE;
+    var tLines = getTextLines(tContent, CARD_W - tPadding * 2, bodyFontSize, bodyLineHeight, 'Montserrat');
+    var tBlockHeight = tLines.length * bodyLineHeight;
+    // CSS: bottom = y% → bottom edge of block is at (CARD_H - y% * CARD_H)
+    // + half-leading correction
+    var tTop = CARD_H - (textYPct * CARD_H) - tBlockHeight + (bodyLineHeight - bodyFontSize) / 2;
 
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#fff';
     ctx.textBaseline = 'top';
-    renderRichText(ctx, tContent, tFontSize, tLineHeight, tPadding, tTop, CARD_W - tPadding * 2, 'Montserrat', 'uppercase');
+    renderRichText(ctx, tContent, bodyFontSize, bodyLineHeight, tPadding, tTop, CARD_W - tPadding * 2, 'Montserrat', 'uppercase');
     ctx.restore();
 
     // 8. Logo
@@ -587,7 +598,7 @@ document.getElementById('export-btn').addEventListener('click', async function()
     var arrowsLayer = document.getElementById('layer-arrows');
     if (arrowsLayer.style.display !== 'none') {
       var arrowStyle = window.getComputedStyle(arrowsLayer);
-      var arrowFontSize = parseFloat(arrowStyle.fontSize) * SCALE;
+      var arrowFontSize = parseFloat(arrowStyle.fontSize); // card.offsetWidth === CARD_W always, no scale needed
       var arrowTopStyle = arrowsLayer.style.top;
       var arrowBottomStyle = arrowsLayer.style.bottom;
       var arrowTop = arrowTopStyle && arrowTopStyle !== 'auto'
@@ -688,8 +699,9 @@ function getTextLines(el, maxWidth, fontSize, lineHeight, fontFamily) {
 
 function renderRichText(ctx, el, fontSize, lineHeight, paddingX, startY, maxWidth, fontFamily, textTransform) {
   var lines = getTextLines(el, maxWidth, fontSize, lineHeight, fontFamily);
-  // alphabetic baseline: offset by ~0.8 of fontSize so first line sits at startY visually
-  var y = startY + fontSize * 0.8;
+  // textBaseline 'top': y is the top of the em-square.
+  // We want the top of the first line to sit at startY, so use 'top' directly.
+  var y = startY;
   lines.forEach(function(line) {
     var x = paddingX;
     line.runs.forEach(function(run) {
