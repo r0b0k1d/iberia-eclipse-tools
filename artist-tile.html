@@ -463,6 +463,7 @@ async function preload() {
     'images/sun.svg','images/sky.svg','images/moon.svg',
     'images/sun-stage-title.webp','images/sky-stage-title.webp','images/moon-stage-title.webp',
     'images/info-layer.webp',
+    'images/ie_logo.webp',
   ];
   await Promise.all(srcs.map(loadImg));
   // face.png als Fallback
@@ -690,6 +691,20 @@ const lightEdgeColor = {
   // Layer 9: Info-layer
   const info = assets['images/info-layer.webp'];
   if (info) { ctx.drawImage(info,0,0,w,h); }
+
+  // Layer 10: IE Logo — zentriert oben, 320px breit (wie Social Tile)
+  const logo = assets['images/ie_logo.webp'];
+  if (logo) {
+    const logoW = 320;
+    const logoH = logoW * (logo.naturalHeight / logo.naturalWidth);
+    const logoX = (w - logoW) / 2;
+    const logoY = 64;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(logo, logoX, logoY, logoW, logoH);
+    ctx.restore();
+  }
 }
 
 // Text-Wrapping mit letterSpacing — gibt Array von Zeilen zurück

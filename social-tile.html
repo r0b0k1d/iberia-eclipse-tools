@@ -262,9 +262,11 @@ function scaleCard() {
   const area = document.getElementById('canvas-area');
   const padding = window.innerWidth <= 768 ? 24 : 80;
   const scale = Math.min((area.clientWidth - padding) / CARD_W, (area.clientHeight - padding) / CARD_H);
-  wrapper.style.transformOrigin = 'top center';
+  wrapper.style.transformOrigin = 'center center';
   wrapper.style.transform = 'scale(' + scale + ')';
-  wrapper.style.marginBottom = '-' + (CARD_H * (1 - scale)) + 'px';
+  const shrink = CARD_H * (1 - scale) / 2;
+  wrapper.style.marginTop = '-' + shrink + 'px';
+  wrapper.style.marginBottom = '-' + shrink + 'px';
 }
 scaleCard();
 window.addEventListener('resize', scaleCard);
